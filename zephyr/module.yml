@@ -1,0 +1,7 @@
+name: sdp8xx_driver
+
+build:
+  kconfig: Kconfig
+  cmake: .
+  settings:
+    dts_root: .

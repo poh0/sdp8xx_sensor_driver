@@ -1,0 +1,5 @@
+description: Sensirion SDP8XX differential pressure sensor
+
+compatible: "sensirion,sdp8xx"
+
+include: [sensor-device.yaml, i2c-device.yaml]
