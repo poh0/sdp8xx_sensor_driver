@@ -1,5 +1,19 @@
-description: Sensirion SDP8XX differential pressure sensor
+description: Sensirion SDP8XX Differential Pressure Sensor
 
 compatible: "sensirion,sdp8xx"
 
 include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+  clock-stretching:
+    type: boolean
+    description: |
+      If set, uses I2C clock stretching (sensor holds SCL low).
+      If unset, uses polling (repeated read attempts).
+  measurement-mode:
+    type: string
+    default: "mass-flow"
+    description: "Initial measurement mode at boot"
+    enum:
+      - "diff-pressure"
+      - "mass-flow"

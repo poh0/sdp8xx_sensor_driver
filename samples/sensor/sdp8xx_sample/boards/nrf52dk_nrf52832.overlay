@@ -5,5 +5,7 @@
 		status = "okay";
 		compatible = "sensirion,sdp8xx";
 		reg = <0x25>;
+		/* clock-stretching; */
+		/* measurement-mode = "diff-pressure"; */
 	};
 };

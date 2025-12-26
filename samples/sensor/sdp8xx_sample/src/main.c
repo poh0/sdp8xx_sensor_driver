@@ -7,7 +7,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/logging/log.h>
- 
+
+#include <zephyr/drivers/sensor/sdp8xx.h>
+
 LOG_MODULE_REGISTER(APP, LOG_LEVEL_INF);
  
 const struct device *dev = DEVICE_DT_GET_ANY(sensirion_sdp8xx);

@@ -1,6 +1,11 @@
+# Copyright (c) 2025 Lauri Pöhö
+# SPDX-License-Identifier: Apache-2.0
+
 config SDP8XX
-    bool "Enable SDP8xx sensor"
+    bool "SDP8xx Differential Pressure Sensor"
     default y
-    depends on I2C
+    depends on DT_HAS_SENSIRION_SDP8XX_ENABLED
+    select I2C
+    select CRC
     help
-      Enable the Sensirion SDP8xx differential pressure sensor driver.
+      Enable driver for Sensirion SDP8xx Differential Pressure Sensor.
