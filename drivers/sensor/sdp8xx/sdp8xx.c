@@ -191,9 +191,9 @@ static int sdp8xx_pm_action(const struct device *dev,
 		uint8_t buffer[2];
 		(void)i2c_write_dt(&cfg->i2c, &buffer[0], 1);
 
-        k_sleep(K_MSEC(2));
-
         sdp8xx_i2c_put(dev);
+
+        k_sleep(K_MSEC(2));
         break;
 
     case PM_DEVICE_ACTION_SUSPEND:
