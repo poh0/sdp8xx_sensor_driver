@@ -6,6 +6,8 @@
 		compatible = "sensirion,sdp8xx";
 		reg = <0x25>;
 		/* clock-stretching; */
+		/* averaging */
 		/* measurement-mode = "diff-pressure"; */
+		zephyr,pm-device-runtime-auto;
 	};
 };

@@ -10,6 +10,10 @@ properties:
     description: |
       If set, uses I2C clock stretching (sensor holds SCL low).
       If unset, uses polling (repeated read attempts).
+  averaging:
+    type: boolean
+    description: |
+      If set, averages continuous mode measurements..
   measurement-mode:
     type: string
     default: "mass-flow"

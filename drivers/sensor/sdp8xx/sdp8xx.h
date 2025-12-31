@@ -14,11 +14,17 @@
 #define SDP8XX_CMD_TRIG_MF              0x3624
 #define SDP8XX_CMD_TRIG_MF_CS           0x3726
 
+/* Continuous modes */
+#define SDP8XX_CMD_CONT_DP              0x361E
+#define SDP8XX_CMD_CONT_DP_AVG          0x3615
+#define SDP8XX_CMD_CONT_MF              0x3608
+#define SDP8XX_CMD_CONT_MF_AVG          0x3603
+
 #define SDP8XX_CRC_POLY                 0x31
 #define SDP8XX_CRC_INIT                 0xFF
 
 /* new measurement is ready after 45 ms */
-#define SDP8XX_TRIG_MEASURE_WAIT_MS     45
+#define SDP8XX_TRIG_MEASURE_WAIT_MS     55
 
 #define SDP8XX_POLL_INTERVAL            5
 
@@ -27,6 +33,7 @@
 struct sdp8xx_config {
     struct i2c_dt_spec i2c;
     bool clock_stretching;
+    bool averaging;
     uint16_t default_mode;
 };
 

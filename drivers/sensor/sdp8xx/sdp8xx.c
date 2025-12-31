@@ -11,9 +11,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/pm/device.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/crc.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 
 #include <zephyr/drivers/sensor/sdp8xx.h>
 #include "sdp8xx.h"
@@ -83,24 +84,38 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
 	case SDP8XX_MODE_MASS_FLOW:
 		cmd = cfg->clock_stretching ? SDP8XX_CMD_TRIG_MF_CS : SDP8XX_CMD_TRIG_MF;
 		break;
+/*
+	case SDP8XX_MODE_DIFF_PRESSURE_CONT:
+		cmd = cfg->averaging ? SDP8XX_CMD_CONT_DP_AVG : SDP8XX_CMD_CONT_DP;
+		break;
+	case SDP8XX_MODE_MASS_FLOW_CONT:
+		cmd = cfg->averaging ? SDP8XX_CMD_CONT_MF_AVG : SDP8XX_CMD_CONT_MF;
+		break;
+*/
 	default:
 		return -ENOTSUP;
+	}
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
 	}
 
 	ret = sdp8xx_write_command(dev, cmd);
 
 	if (ret < 0) {
 		LOG_ERR("Failed to trigger measurement");
+		pm_device_runtime_put(dev);
 		return ret;
 	}
 
-	/* Wait for measurement */
 	k_sleep(K_MSEC(SDP8XX_TRIG_MEASURE_WAIT_MS));
 
 	ret = i2c_read_dt(&cfg->i2c, rx_buf, sizeof(rx_buf));
 	
 	if (ret < 0) {
 		LOG_ERR("Failed to read data");
+		pm_device_runtime_put(dev);
 		return ret;
 	}
 
@@ -109,8 +124,11 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
 	data->scale_factor = sys_get_be16(&rx_buf[6]);
 
 	if (data->scale_factor == 0) {
+		pm_device_runtime_put(dev);
 		return -EIO;
 	}
+
+	pm_device_runtime_put(dev);
 
 	return 0;
 }
@@ -152,6 +170,12 @@ static int sdp8xx_init(const struct device *dev)
 
 	data->meas_mode = cfg->default_mode;
 
+	int ret = pm_device_runtime_enable(dev);
+
+	if (ret < 0 && ret != -ENOSYS) {
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -161,18 +185,49 @@ static DEVICE_API(sensor, sdp8xx_api) = {
 	.attr_set = sdp8xx_attr_set
 };
 
+#ifdef CONFIG_PM_DEVICE
+static int sdp8xx_pm_action(const struct device *dev,
+                            enum pm_device_action action)
+{
+    const struct sdp8xx_config *cfg = dev->config;
+    int ret = 0;
+
+    switch (action) {
+    case PM_DEVICE_ACTION_RESUME:
+        /* send dummy write to wake up (Datasheet 6.3.5) */
+        uint8_t dummy = 0;
+        (void)i2c_write_dt(&cfg->i2c, &dummy, 0);
+		/* 2ms max acc. datasheet */
+        k_sleep(K_MSEC(2));
+        break;
+
+    case PM_DEVICE_ACTION_SUSPEND:
+        /* send sleep command */
+        ret = sdp8xx_write_command(dev, SDP8XX_CMD_ENTER_SLEEP);
+        break;
+
+    default:
+        return -ENOTSUP;
+    }
+
+    return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define SDP8XX_INIT(inst)                                       \
 	static struct sdp8xx_data sdp8xx_data_##inst;               \
 																\
 	static const struct sdp8xx_config sdp8xx_config_##inst = {  \
 		.i2c = I2C_DT_SPEC_INST_GET(inst),						\
-		.clock_stretching = DT_INST_PROP(inst, clock_stretching), \
+		.clock_stretching = DT_INST_PROP(inst, clock_stretching),\
+		.averaging = DT_INST_PROP(inst, averaging),				\
 		.default_mode = DT_INST_ENUM_IDX(inst, measurement_mode)\
 	};                                                          \
 																\
+	PM_DEVICE_DT_INST_DEFINE(inst, sdp8xx_pm_action);			\
 	SENSOR_DEVICE_DT_INST_DEFINE(inst,							\
 							sdp8xx_init,						\
-							NULL,       						\
+							PM_DEVICE_DT_INST_GET(inst),		\
 			      			&sdp8xx_data_##inst,				\
 							&sdp8xx_config_##inst,   			\
 			      			POST_KERNEL,						\
