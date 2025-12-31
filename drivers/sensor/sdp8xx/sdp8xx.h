@@ -6,7 +6,6 @@
 #define SDP8XX_CMD_STOP_CONT            0x3FF9
 #define SDP8XX_CMD_SOFT_RESET           0x0006
 #define SDP8XX_CMD_ENTER_SLEEP          0x3677
-#define SDP8XX_CMD_EXIT_SLEEP           0x0000 /* Dummy write to wake */
 
 /* Triggered Modes */
 #define SDP8XX_CMD_TRIG_DP              0x362F
@@ -23,12 +22,13 @@
 #define SDP8XX_CRC_POLY                 0x31
 #define SDP8XX_CRC_INIT                 0xFF
 
-/* new measurement is ready after 45 ms */
-#define SDP8XX_TRIG_MEASURE_WAIT_MS     55
+#define SDP8XX_POWERUP_TIME_MS          25
+#define SDP8XX_RESET_WAIT_TIME_MS       2
 
-#define SDP8XX_POLL_INTERVAL            5
+/* new measurement is ready after max 50 ms */
+#define SDP8XX_TRIG_MEASURE_WAIT_MS     50
 
-#define TEMP_SCALE_FACTOR 200.f
+#define TEMP_SCALE_FACTOR               200.f
 
 struct sdp8xx_config {
     struct i2c_dt_spec i2c;

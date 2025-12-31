@@ -1,13 +1,35 @@
 
 &i2c0 {
+	compatible = "nordic,nrf-twi";
 	status = "okay";
+	pinctrl-0 = <&i2c0_default>;
+	pinctrl-1 = <&i2c0_sleep>;
+	pinctrl-names = "default", "sleep";
+	zephyr,pm-device-runtime-auto;
 	sdp8xx@25 {
 		status = "okay";
 		compatible = "sensirion,sdp8xx";
 		reg = <0x25>;
 		/* clock-stretching; */
-		/* averaging */
 		/* measurement-mode = "diff-pressure"; */
 		zephyr,pm-device-runtime-auto;
 	};
+};
+
+&pinctrl {
+    i2c0_default: i2c0_default {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 27)>;
+            bias-pull-up;
+        };
+    };
+
+    i2c0_sleep: i2c0_sleep {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 27)>;
+            low-power-enable;
+        };
+    };
 };

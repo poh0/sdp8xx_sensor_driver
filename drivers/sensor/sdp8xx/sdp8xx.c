@@ -37,6 +37,20 @@ static int sdp8xx_write_command(const struct device *dev, uint16_t cmd)
     return i2c_write_dt(&cfg->i2c, tx_buf, sizeof(tx_buf));
 }
 
+static int sdp8xx_i2c_get(const struct device *dev)
+{
+	const struct sdp8xx_config *config = dev->config;
+
+	return pm_device_runtime_get(config->i2c.bus);
+}
+
+static int sdp8xx_i2c_put(const struct device *dev)
+{
+	const struct sdp8xx_config *config = dev->config;
+
+	return pm_device_runtime_put(config->i2c.bus);
+}
+
 static int sdp8xx_attr_set(const struct device *dev,
 							enum sensor_channel chan,
 							enum sensor_attribute attr,
@@ -67,14 +81,13 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
     
 	int ret;
     uint8_t rx_buf[9];
+	uint16_t cmd;
 	
 	if (chan != SENSOR_CHAN_ALL && 
 	    chan != SENSOR_CHAN_PRESS && 
 	    chan != SENSOR_CHAN_AMBIENT_TEMP) {
 		return -ENOTSUP;
 	}
-
-	uint16_t cmd;
 
 	/* Todo: implement clock stretching */
 	switch(data->meas_mode) {
@@ -84,29 +97,26 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
 	case SDP8XX_MODE_MASS_FLOW:
 		cmd = cfg->clock_stretching ? SDP8XX_CMD_TRIG_MF_CS : SDP8XX_CMD_TRIG_MF;
 		break;
-/*
-	case SDP8XX_MODE_DIFF_PRESSURE_CONT:
-		cmd = cfg->averaging ? SDP8XX_CMD_CONT_DP_AVG : SDP8XX_CMD_CONT_DP;
-		break;
-	case SDP8XX_MODE_MASS_FLOW_CONT:
-		cmd = cfg->averaging ? SDP8XX_CMD_CONT_MF_AVG : SDP8XX_CMD_CONT_MF;
-		break;
-*/
 	default:
 		return -ENOTSUP;
 	}
 
-	ret = pm_device_runtime_get(dev);
+	ret = sdp8xx_i2c_get(dev);
 	if (ret < 0) {
+		LOG_WRN("Couldn't get I2C bus");
 		return ret;
 	}
 
-	ret = sdp8xx_write_command(dev, cmd);
-
+	ret = pm_device_runtime_get(dev);
 	if (ret < 0) {
-		LOG_ERR("Failed to trigger measurement");
-		pm_device_runtime_put(dev);
-		return ret;
+		LOG_WRN("Couldn't get device");
+		goto exit_bus;
+	}
+
+	ret = sdp8xx_write_command(dev, cmd);
+	if (ret < 0) {
+		LOG_ERR("Couldn't write I2C");
+		goto exit_dev;
 	}
 
 	k_sleep(K_MSEC(SDP8XX_TRIG_MEASURE_WAIT_MS));
@@ -115,8 +125,7 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
 	
 	if (ret < 0) {
 		LOG_ERR("Failed to read data");
-		pm_device_runtime_put(dev);
-		return ret;
+		goto exit_dev;
 	}
 
 	data->pressure_raw = sys_get_be16(&rx_buf[0]);
@@ -124,13 +133,17 @@ static int sdp8xx_sample_fetch(const struct device *dev, enum sensor_channel cha
 	data->scale_factor = sys_get_be16(&rx_buf[6]);
 
 	if (data->scale_factor == 0) {
-		pm_device_runtime_put(dev);
-		return -EIO;
+		ret = -EIO;
+		goto exit_dev;
 	}
 
+exit_dev:
 	pm_device_runtime_put(dev);
 
-	return 0;
+exit_bus:
+	sdp8xx_i2c_put(dev);
+
+	return ret;
 }
 
 static int sdp8xx_channel_get(const struct device *dev,
@@ -158,6 +171,53 @@ static int sdp8xx_channel_get(const struct device *dev,
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int sdp8xx_pm_action(const struct device *dev,
+                            enum pm_device_action action)
+{
+    const struct sdp8xx_config *cfg = dev->config;
+    int ret = 0;
+
+    switch (action) {
+    case PM_DEVICE_ACTION_RESUME:
+        int ret;
+		ret = sdp8xx_i2c_get(dev);
+		if (ret < 0) {
+			LOG_WRN("Couldn't get I2C bus");
+			break;
+		}
+
+		/* Send write bit + wait 2ms (datasheet)*/
+		uint8_t buffer[2];
+		(void)i2c_write_dt(&cfg->i2c, &buffer[0], 1);
+
+        k_sleep(K_MSEC(2));
+
+        sdp8xx_i2c_put(dev);
+        break;
+
+    case PM_DEVICE_ACTION_SUSPEND:
+		ret = sdp8xx_i2c_get(dev);
+		if (ret < 0) {
+			LOG_WRN("Couldn't get I2C bus");
+			break;
+		}
+
+        ret = sdp8xx_write_command(dev, SDP8XX_CMD_ENTER_SLEEP);
+		if (ret < 0) {
+			LOG_WRN("Couldn't enter sleep: %d", ret);
+		}
+		sdp8xx_i2c_put(dev);
+        break;
+
+    default:
+        ret = -ENOTSUP;
+    }
+
+    return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 static int sdp8xx_init(const struct device *dev)
 {
 	const struct sdp8xx_config *cfg = dev->config;
@@ -168,13 +228,11 @@ static int sdp8xx_init(const struct device *dev)
 		return -ENODEV;
 	}
 
+	/* max 25ms power up time */
+	k_sleep(K_MSEC(SDP8XX_POWERUP_TIME_MS));
+
 	data->meas_mode = cfg->default_mode;
-
-	int ret = pm_device_runtime_enable(dev);
-
-	if (ret < 0 && ret != -ENOSYS) {
-		return ret;
-	}
+	pm_device_init_suspended(dev);
 
 	return 0;
 }
@@ -184,35 +242,6 @@ static DEVICE_API(sensor, sdp8xx_api) = {
 	.channel_get = sdp8xx_channel_get,
 	.attr_set = sdp8xx_attr_set
 };
-
-#ifdef CONFIG_PM_DEVICE
-static int sdp8xx_pm_action(const struct device *dev,
-                            enum pm_device_action action)
-{
-    const struct sdp8xx_config *cfg = dev->config;
-    int ret = 0;
-
-    switch (action) {
-    case PM_DEVICE_ACTION_RESUME:
-        /* send dummy write to wake up (Datasheet 6.3.5) */
-        uint8_t dummy = 0;
-        (void)i2c_write_dt(&cfg->i2c, &dummy, 0);
-		/* 2ms max acc. datasheet */
-        k_sleep(K_MSEC(2));
-        break;
-
-    case PM_DEVICE_ACTION_SUSPEND:
-        /* send sleep command */
-        ret = sdp8xx_write_command(dev, SDP8XX_CMD_ENTER_SLEEP);
-        break;
-
-    default:
-        return -ENOTSUP;
-    }
-
-    return ret;
-}
-#endif /* CONFIG_PM_DEVICE */
 
 #define SDP8XX_INIT(inst)                                       \
 	static struct sdp8xx_data sdp8xx_data_##inst;               \

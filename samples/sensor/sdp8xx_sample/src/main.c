@@ -22,7 +22,6 @@ int main(void)
     }
 
     struct sensor_value pressure, temp;
-
     while (1) {
         if (sensor_sample_fetch(dev) < 0) {
             LOG_WRN("Fetch failed");
