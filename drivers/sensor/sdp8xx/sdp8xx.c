@@ -202,8 +202,7 @@ static int sdp8xx_pm_action(const struct device *dev,
 			LOG_WRN("Couldn't get I2C bus");
 			break;
 		}
-
-        ret = sdp8xx_write_command(dev, SDP8XX_CMD_ENTER_SLEEP);
+		ret = sdp8xx_write_command(dev, SDP8XX_CMD_ENTER_SLEEP);
 		if (ret < 0) {
 			LOG_WRN("Couldn't enter sleep: %d", ret);
 		}
@@ -232,9 +231,8 @@ static int sdp8xx_init(const struct device *dev)
 	k_sleep(K_MSEC(SDP8XX_POWERUP_TIME_MS));
 
 	data->meas_mode = cfg->default_mode;
-	pm_device_init_suspended(dev);
 
-	return 0;
+	return pm_device_runtime_enable(dev);
 }
 
 static DEVICE_API(sensor, sdp8xx_api) = {
